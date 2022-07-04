@@ -10,13 +10,13 @@ A virtual teach pendant and programming interface for the Hudson PlateCrane robo
 
 ☑ Record and GoTo points
 
-☐ Delete points
+☑ Delete points
 
-☐ Gripper open/close
+☑ Gripper open/close
 
 ☐ Input readout
 
-☐ Seek function
+☑ Seek function - this is handled by the robot itself
 
 # Use
 
