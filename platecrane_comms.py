@@ -83,7 +83,7 @@ class PlateCrane:
     
     def _readIO(self, ioToRead):
         inpStr = bytes(str(ioToRead), 'UTF-8')
-        self._writeWithEcho(b'GETINP ' + inpStr + b'\r\n')
+        self._writeWithEcho(b'READINP ' + inpStr + b'\r\n')
         self.ioStrs[ioToRead] = self._s.readline()
     
     
@@ -136,6 +136,7 @@ class PlateCrane:
         # pointsLock is normally locked
         self.pointsLock.acquire()
         
+        self.fastIoNum = 22
         self.sendDriverParams = sendDriverParams
         self._s = serial.Serial(port, 9600, timeout=0.5)
         self._configPath = config
@@ -180,9 +181,14 @@ class PlateCrane:
     def getPosition(self):
         return str(self.posnStr[:-2]).strip("'b")
     
+    #TODO: getInput(input) to replace getInputs()?
     def getInputs(self):
-        #return str(self.ioStrs).replace(',', '\n').strip('{}b') TODO
-        return ""
+        return str(self.ioStrs) \
+            .strip("{}") \
+            .replace(",", " ") \
+            .replace("\\r\\n", "") \
+            .replace("b", "") \
+            .replace("'", "")
     
     def motorsOff(self):
         self.areMotorsOff = True
@@ -211,8 +217,21 @@ class PlateCrane:
     def here(self, pointName):
         self._addCmd(b'HERE ' + bytes(pointName, 'UTF-8'))
     
+    def clear(self, pointName):
+        self._addCmd(b'DELETEPOINT ' + bytes(pointName, 'UTF-8'))
+    
     def move(self, pointName):
         self._addCmd(b'MOVE ' + bytes(pointName, 'UTF-8'))
+    
+    # 0=low, 3=max
+    def gripForce(self, amount):
+        self._addCmd(b'SETGRIPSTRENGTH ' + bytes(str(amount), 'UTF-8'))
+    
+    def grip(self):
+        self._addCmd(b'CLOSE')
+    
+    def release(self):
+        self._addCmd(b'OPEN')
     
     def getPoints(self):
         # prevent hanging when called before reset()

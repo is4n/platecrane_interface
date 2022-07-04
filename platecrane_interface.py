@@ -78,6 +78,9 @@ def gotoClicked(robot, uiCurrPoint, uiPointsList):
     robot.move(uiCurrPoint.get())
     updatePointsList(robot, uiPointsList)
 
+def gripStrengthClicked(robot, strength):
+    robot.gripForce(strength)
+
 def updatePointsList(robot, uiPointsList):
     oldIndex = uiPointsList.curselection
     uiPointsList.delete(0, END)
@@ -154,6 +157,38 @@ def drawMainUi(root, robot):
             robot,
             axis
         )
+    
+    gripStrPanel = Frame(frame)
+    gripStrPanel.pack()
+    
+    Label(
+        jogPanel,
+        text = "Grip strength"
+    ).pack()
+    for gripStrength in range(0, 4):
+        Button(
+            gripStrPanel,
+            text = str(gripStrength),
+            command = partial(
+                gripStrengthClicked,
+                robot,
+                gripStrength
+            )
+        ).pack(side='left')
+    
+    gripPanel = Frame(frame)
+    gripPanel.pack()
+    
+    Button(
+        gripPanel,
+        text = 'Grip',
+        command = robot.grip
+    ).pack(side='left')
+    Button(
+        gripPanel,
+        text = 'Release',
+        command = robot.release
+    ).pack(side='left')
     
     uiCurrPoint = StringVar()
     
