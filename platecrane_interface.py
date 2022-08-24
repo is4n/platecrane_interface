@@ -6,6 +6,7 @@ from tkinter import *
 from tkinter.messagebox import showerror
 
 from platecrane_comms import PlateCrane
+from platecrane_runner import drawPlatecraneRunner
 
 APPNAME = 'PlateCrane interface'
 
@@ -106,6 +107,7 @@ def updateCurrentPointSelection(uiPointsList, uiCurrPoint, e):
 
 def drawMainUi(root, robot):
     mainUi = Toplevel(root)
+    mainUi.attributes('-topmost', 'true')
     mainUi.protocol("WM_DELETE_WINDOW", partial(appExit, robot))
     
     frame = Frame(mainUi)
@@ -121,6 +123,15 @@ def drawMainUi(root, robot):
     statPanel = Frame(frame)
     statPanel.pack()
     
+    Button(
+        statPanel,
+        text = "Program link",
+        command = partial(
+            drawPlatecraneRunner,
+            root,
+            robot
+        )
+    ).pack()
     # the resetBtn event handler is added later because it must
     # access another control defined further down
     resetBtn = Button(
@@ -226,6 +237,10 @@ def drawMainUi(root, robot):
             pointsList
         )
     ).pack()
+    Button(
+        currPointPanel,
+        text = "Edit"
+    ).pack(side=LEFT)
     Button(
         currPointPanel,
         text = 'Record',
