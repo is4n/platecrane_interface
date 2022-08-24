@@ -1,5 +1,7 @@
 # Hudson PlateCrane Python interface
 
+![Alt text](/screenshot_new.png?raw=true)
+
 A virtual teach pendant and programming interface for the Hudson PlateCrane robot arm. To do list:
 
 ☑ Robot connection
