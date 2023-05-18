@@ -174,9 +174,10 @@ class PlateCrane:
             )
             self._workerThread.start()
         
-        self._addCmd(b'HOME')
         if self.sendDriverParams:
             self.driverInit()
+        self._addCmd(b'HOME')
+
     
     def getPosition(self):
         return str(self.posnStr[:-2]).strip("'b")
