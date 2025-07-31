@@ -1,0 +1,5 @@
+SETCONFIG 15
+SETSPEEDS 10000,9000,15000,20000
+
+was the previous setup
+
