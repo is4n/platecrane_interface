@@ -1,11 +1,49 @@
 import serial
 import os
+import re
 import threading
 import time
 import logging
 
 NUM_IO = 48
 CMD_TERM = b'00\x10\r\n'
+
+
+class DummySerialDevice:
+    def __init__(self, port, baudrate, timeout=0):
+        self.last_command = b""
+    
+    def write(self, data):
+        print(f"(DummySerialDevice) robot received: {data}")
+        self.last_command = data
+    
+    def flush(self):
+        print("(DummySerialDevice) (flush)")
+        pass
+    
+    def readline(self):
+        time.sleep(0.04)
+        echo = self.last_command
+        if (echo == b'LISTPOINTS\r\n'):
+            self.last_command = b"dummy, 0, 0, 0, 0\r\n"
+        elif (echo == b"dummy, 0, 0, 0, 0\r\n"):
+            self.last_command = b"\r\n"
+        elif (echo == b'GETPOS\r\n'):
+            self.last_command = b'1, 3, 5, 7\r\n'
+        elif len(echo):
+            self.last_command = CMD_TERM
+        else:
+            self.last_command = b''
+        print(f"(DummySerialDevice) robot wrote: {echo}")
+        return echo
+    
+    def readall(self):
+        time.sleep(0.01)
+        self.last_command = ""
+        return ""
+    
+    def close(self):
+        self.last_command = ""
 
 class PlateCrane:
     areMotorsOff = False
@@ -19,6 +57,7 @@ class PlateCrane:
     error = None
     
     pointStrs = {}
+    pointsRead = False
     pointsLock = threading.Lock()
     
     posnStr = b'0, 0, 0, 0\r\n'
@@ -43,6 +82,7 @@ class PlateCrane:
     
     def _readPoints(self):
         self._writeWithEcho(b'LISTPOINTS\r\n')
+        hasInvalidPoints = False
         
         while True:
             resp = self._s.readline()
@@ -51,9 +91,28 @@ class PlateCrane:
                 raise ValueError('robot timeout when reading points')
             if (resp == b'\r\n'):
                 break
-            
-            name, values = str(resp[:-2])[2:-1].split(',', 1)
+            try:
+                name, values = str(resp[:-2])[2:-1].split(',', 1)
+            except ValueError:
+                hasInvalidPoints = True
+                continue
+            # if the controller is powered on without a CMOS battery,
+            # the points will contain random ASCII data which can
+            # break the name/values parsing. If values is malformed,
+            # skip and move to the next line.
+            if not re.match(r' [-\d]+, [-\d]+, [-\d]+, [-\d]+', values):
+                hasInvalidPoints = True
+                continue
             self.pointStrs[name] = values
+        
+        # if bad data was returned from LISTPOINTS, clear points list
+        if hasInvalidPoints:
+            print('Invalid points found in points list, clearing')
+            self._s.write(b'CLEARPOINTS\r\n')
+            self.pointStrs = {}
+            self._s.readall()
+        
+        self.pointsRead = True
     
     def _readPosn(self):
         self._writeWithEcho(b'GETPOS\r\n')
@@ -75,8 +134,9 @@ class PlateCrane:
                 if (self.expectedResponse == '*'):
                     self.receivedResponse = resp
                 elif (resp != self.expectedResponse):
-                    msg = f'{self.command}: unexpected robot response:'
+                    msg = f'{self.command}: unexpected robot response: '
                     msg += str(resp)
+                    msg += f'\n(expected {self.expectedResponse})'
                     self.error = msg
 
             self.command = None
@@ -138,35 +198,49 @@ class PlateCrane:
         
         self.fastIoNum = 22
         self.sendDriverParams = sendDriverParams
-        self._s = serial.Serial(port, 9600, timeout=0.5)
+        
+        # enable debugging with dummy device
+        if (port == ""):
+            self._s = DummySerialDevice(port, 9600, timeout=0.25)
+        else:
+            self._s = serial.Serial(port, 9600, timeout=0.25)
+        
         self._configPath = config
     
     # the Y- and P-axis drivers lose their params on startup, so
     # we re-send them here
     def driverInit(self):
-        # disable all other communcation before entering TERMINAL mode
-        self.posnLock.acquire()
-        self.ioLock.acquire()
-        
-        self._addCmd(b'TERMINAL')
-        self.expectedResponse = None
+        self._s.write(b'TERMINAL\r\n')
+        print(self._s.readall())
         
         with open(os.path.join(self._configPath, 'driver.params'), 'r') as dpFile:
             driverConfig = dpFile.read().split('\n')
             
             for line in driverConfig:
                 if line:
-                    self._addCmd(bytes(line, 'UTF-8'))
+                    self._s.write(bytes(line, 'UTF-8') + b'\r\n')
+                    print(self._s.readall())
         
-        self.expectedResponse = CMD_TERM
-        self.ignoreEcho = True
-        self._addCmd(b'TERMINAL')
-        self.ignoreEcho = False
+        self._s.write(b'TERMINAL\r\n')
+        print(self._s.readall())
+    
+    # system params to send on startup
+    def systemInit(self):
+        print(self._s.readall())
         
-        self.posnLock.release()
-        self.ioLock.release()
+        with open(os.path.join(self._configPath, 'system.params'), 'r') as spFile:
+            systemConfig = spFile.read().split('\n')
+            
+            for line in systemConfig:
+                if line:
+                    self._s.write(bytes(line, 'UTF-8') + b'\r\n')
+                    print(self._s.readall())
     
     def reset(self):
+        self.systemInit()
+        if self.sendDriverParams:
+            self.driverInit()
+        
         if not self._workerThread or not self._workerThread.is_alive():
             self._workerThread = threading.Thread(
                 target=self._serialWorker,
@@ -174,10 +248,7 @@ class PlateCrane:
             )
             self._workerThread.start()
         
-        if self.sendDriverParams:
-            self.driverInit()
         self._addCmd(b'HOME')
-
     
     def getPosition(self):
         return str(self.posnStr[:-2]).strip("'b")
@@ -240,8 +311,9 @@ class PlateCrane:
             return {}
         
         self.pointStrs = {}
+        self.pointsRead = False
         self.pointsLock.release()
-        while not self.pointStrs:
+        while not self.pointsRead:
             time.sleep(0.01)
         self.pointsLock.acquire()
         

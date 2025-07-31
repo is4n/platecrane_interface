@@ -289,7 +289,7 @@ def onConnectClicked(root, parentWindow, uiDevName):
         )
     
     try:
-        robot = PlateCrane(port=devName, sendDriverParams=True)
+    robot = PlateCrane(port=devName, sendDriverParams=True)
     except Exception as e:
         showerror(
             title = APPNAME,
