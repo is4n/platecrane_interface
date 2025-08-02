@@ -91,9 +91,9 @@ def updatePointsList(robot, uiPointsList):
     
     uiPointsList.curselection = oldIndex
 
-def onResetClicked(robot, uiPointsList):
+def onResetClicked(robot, uiPointsList, isReconnect):
     try:
-        robot.reset()
+        robot.reset(resume=isReconnect)
     except Exception as e:
         showerror(
             title = APPNAME,
@@ -132,13 +132,27 @@ def drawMainUi(root, robot):
             robot
         )
     ).pack()
+
     # the resetBtn event handler is added later because it must
     # access another control defined further down
+    resetFrame = Frame(statPanel)
+    resetFrame.pack()
     resetBtn = Button(
-        statPanel,
-        text = "Reset and Home",
+        resetFrame,
+        text = "Reset/Home",
     )
-    resetBtn.pack()
+    resetBtn.pack(side=LEFT)
+    reconnectBtn = Button(
+        resetFrame,
+        text = "Rcn",
+    )
+    reconnectBtn.pack(side=LEFT)
+    disconnectBtn = Button(
+        resetFrame,
+        text = "Dsc",
+    )
+    disconnectBtn.pack(side=LEFT)
+    
     Label(
         statPanel,
         textvariable = uiPosReadout
@@ -266,8 +280,20 @@ def drawMainUi(root, robot):
         command = partial(
             onResetClicked,
             robot,
-            pointsList
+            pointsList,
+            False
         )
+    )
+    reconnectBtn.config(
+        command = partial(
+            onResetClicked,
+            robot,
+            pointsList,
+            True
+        )
+    )
+    disconnectBtn.config(
+        command = robot.close
     )
     
     threading.Thread(

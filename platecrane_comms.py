@@ -150,7 +150,7 @@ class PlateCrane:
     def _serialWorker(self):
         currIoRead = 0
         
-        while True:
+        while self._runWorker:
             if self.pointsLock.acquire(blocking=False):
                 self._readPoints()
                 self.pointsLock.release()
@@ -177,8 +177,13 @@ class PlateCrane:
                         currIoRead += 1
                 
                 self.ioLock.release()
+            
+        self._workerFinished = True
     
     def _addCmd(self, cmd, block=True):
+        if not self._runWorker:
+            raise Exception("The robot is not connected!")
+        
         logging.info(f'sending "{cmd}"')
         self.cmdLock.acquire()
         self.command = cmd + b'\r\n'
@@ -199,13 +204,21 @@ class PlateCrane:
         self.fastIoNum = 22
         self.sendDriverParams = sendDriverParams
         
+        self._port = port
+        
+        self._runWorker = False
+        
         # enable debugging with dummy device
-        if (port == ""):
-            self._s = DummySerialDevice(port, 9600, timeout=0.25)
-        else:
-            self._s = serial.Serial(port, 9600, timeout=0.25)
+        self.portInit()
         
         self._configPath = config
+    
+    def portInit(self):
+        # enable debugging with dummy device
+        if (self._port == ""):
+            self._s = DummySerialDevice(self._port, 9600, timeout=0.25)
+        else:
+            self._s = serial.Serial(self._port, 9600, timeout=0.25)
     
     # the Y- and P-axis drivers lose their params on startup, so
     # we re-send them here
@@ -236,19 +249,27 @@ class PlateCrane:
                     self._s.write(bytes(line, 'UTF-8') + b'\r\n')
                     print(self._s.readall())
     
-    def reset(self):
-        self.systemInit()
-        if self.sendDriverParams:
-            self.driverInit()
+    # set "resume" to True to avoid sending anything to the robot
+    def reset(self, resume=False):
+        if not self._s:
+            self.portInit()
+        
+        if not resume:
+            self.systemInit()
+            if self.sendDriverParams:
+                self.driverInit()
         
         if not self._workerThread or not self._workerThread.is_alive():
             self._workerThread = threading.Thread(
                 target=self._serialWorker,
                 daemon=True
             )
+            self._workerFinished = False
+            self._runWorker = True
             self._workerThread.start()
         
-        self._addCmd(b'HOME')
+        if not resume:
+            self._addCmd(b'HOME')
     
     def getPosition(self):
         return str(self.posnStr[:-2]).strip("'b")
@@ -320,12 +341,13 @@ class PlateCrane:
         return self.pointStrs
     
     def close(self):
-        #TODO: home pos
-        # stop all worker activity
-        #self.posnLock.acquire()
-        #self.ioLock.acquire()
-        #self.cmdLock.acquire()
-        self._s.close()
+        self._runWorker = False
+        while not self._workerFinished:
+            time.sleep(0.01)
+        if self._s:
+            self._s.close()
+            self._s = None
+        self.posnStr = b'0, 0, 0, 0\r\n'
 
 
 if __name__ == '__main__':
