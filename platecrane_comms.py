@@ -313,8 +313,19 @@ class PlateCrane:
     def clear(self, pointName):
         self._addCmd(b'DELETEPOINT ' + bytes(pointName, 'UTF-8'))
     
-    def move(self, pointName):
-        self._addCmd(b'MOVE ' + bytes(pointName, 'UTF-8'))
+    # control the movement sequence with the optional 'axes' parameter.
+    # move('home', axes=['Z', '*']) # move Z axis first, then move rest of axes
+    # move('home', axes=['Y']) # only move Y axis
+    def move(self, pointName, axes=None):
+        axes = ['*'] if not axes else axes
+        for axis in axes:
+            if (axis == '*'):
+                move_command = b'MOVE '
+            elif axis in ['P', 'R', 'Y', 'Z']:
+                move_command = b'MOVE_' + bytes(axis, 'UTF-8') + b' '
+            else:
+                raise ValueError("invalid axis")
+            self._addCmd(move_command + bytes(pointName, 'UTF-8'))
     
     # 0=low, 3=max
     def gripForce(self, amount):
